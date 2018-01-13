@@ -319,7 +319,7 @@ contract('TokenSale', (accounts) => {
 
 
         it("should throw when hardCap gets overrun", async() =>{
-            let ethBuyIn = maxEthInvestment;
+            let ethBuyIn = maxEthInvestment*0.9;
             let tokenAmountToBuy = Math.floor(ethBuyIn * testRate); // no discount
 
             await tokensale.addWhitelist(client, hardCap, {from: owner});
@@ -334,11 +334,12 @@ contract('TokenSale', (accounts) => {
             var hasStarted = await tokensale.hasStarted();
             hasStarted.should.be.equal(true);
 
-            var buyTx = await tokensale.buyTokens(client, { from: client, value: 20000 * ETHER });
-            var buyTx2 = await tokensale.buyTokens(client, { from: client, value: 20000 * ETHER });
+            var buyTx = await tokensale.buyTokens(client, { from: client, value: ethBuyIn });
+            var buyTx2 = await tokensale.buyTokens(client, { from: client, value: ethBuyIn });
+
 
             shouldHaveException(async ()=>{
-                var buyTx3 = await tokensale.buyTokens(client, { from: client, value: 20000 * ETHER });
+                var buyTx3 = await tokensale.buyTokens(client, { from: client, value: ethBuyIn });
             });
 
 
@@ -360,8 +361,8 @@ contract('TokenSale', (accounts) => {
                 var contractBalance = (await web3.eth.getBalance(tokensale.address)).toNumber();
 
                 await shouldHaveException(async () => {
-                   var withdraw = await tokensale.withdraw({ from: owner});
-               }, "Should throw if !softCapReached");
+                 var withdraw = await tokensale.withdraw({ from: owner});
+             }, "Should throw if !softCapReached");
                 
             });
 
@@ -393,6 +394,52 @@ contract('TokenSale', (accounts) => {
                 } 
                 
             });
+
+
+        it("should let owner pause the sale", async() =>{
+            await increaseTime(2*weekInSeconds);
+            var paused = await tokensale.isPaused( { from: owner });
+            paused.should.be.equal(false);
+
+            await tokensale.pauseSale({from: owner}); // paused
+            paused = await tokensale.isPaused( { from: owner });
+            paused.should.be.equal(true);
+        });
+
+
+        it("should let owner unpause the sale", async() =>{
+            await increaseTime(2*weekInSeconds);
+            var paused;
+            await tokensale.pauseSale({from: owner}); // paused
+            paused = await tokensale.isPaused( { from: owner });
+            paused.should.be.equal(true);
+            await increaseTime(weekInSeconds);
+            await tokensale.unpauseSale({from: owner}); // paused
+            paused = await tokensale.isPaused( { from: owner });
+            paused.should.be.equal(false);
+
+        });
+
+        it("should NOT let client pause the sale", async() =>{
+            var paused = await tokensale.isPaused( { from: owner });
+            paused.should.be.equal(false);
+            await tokensale.pauseSale({from: client})
+            .should.be.rejectedWith(REVERT_MSG);
+        });
+
+
+        it("should reject buying if sale is paused", async() =>{
+            let ethBuyIn = 2 * ETHER;
+
+            await tokensale.addWhitelist(client, ethBuyIn, {from: owner});
+            await increaseTime(2*weekInSeconds);
+
+            await tokensale.pauseSale({from: owner}); // paused
+            var paused = await tokensale.isPaused( { from: owner });
+            paused.should.be.equal(true);
+            var buyTx = await tokensale.buyTokens(client, { from: client, value: ethBuyIn })
+            .should.be.rejectedWith(REVERT_MSG);
+        });
     });
 
 
@@ -451,7 +498,7 @@ describe('#after sale tests - ', async ()=>{
 
         await tokensale.finishCrowdsale({ from: owner });
         await increaseTime(weekInSeconds);
-        var refundTx = await tokensale.refund({from: client});
+        // var refundTx = await tokensale.refund({from: client});
         // assert.equal(refundTx,true);
     });
 
@@ -603,33 +650,33 @@ describe('#after sale tests - ', async ()=>{
             });
 
     it("should transfer proper founderReward after 15 months ", async() =>{
-                
-                await tokensale.addWhitelist(client, 2*maxEthInvestment, {from: owner});
-                var check = await tokensale.checkWhitelist(client,2*maxEthInvestment);
-                check.should.be.equal(true);
 
-                await increaseTime(4*weekInSeconds);
-                let rewardAfter15m = Math.floor(5*teamAndFounders/8);
+        await tokensale.addWhitelist(client, 2*maxEthInvestment, {from: owner});
+        var check = await tokensale.checkWhitelist(client,2*maxEthInvestment);
+        check.should.be.equal(true);
 
-                var buyTx = await tokensale.buyTokens(client, { from: client, value: maxEthInvestment });  
-                var buyTx2 = await tokensale.buyTokens(client, { from: client, value: 10*ETHER });  
+        await increaseTime(4*weekInSeconds);
+        let rewardAfter15m = Math.floor(5*teamAndFounders/8);
 
-                await increaseTime(67*weekInSeconds);
+        var buyTx = await tokensale.buyTokens(client, { from: client, value: maxEthInvestment });  
+        var buyTx2 = await tokensale.buyTokens(client, { from: client, value: 10*ETHER });  
 
-                var hasEnded = await tokensale.hasEnded();
-                hasEnded.should.be.equal(true);
-                
-                var softCapReached = await tokensale.softCapReached();
-                softCapReached.should.be.equal(true);
+        await increaseTime(67*weekInSeconds);
 
-                var finish = await tokensale.finishCrowdsale({ from: owner });
-                var reward = await tokensale.withdrawTokenToFounders({ from: owner});
-                var balance = await tokensale.balanceOf(foundersWallet);
+        var hasEnded = await tokensale.hasEnded();
+        hasEnded.should.be.equal(true);
 
-                assert.equal(balance.toNumber(), rewardAfter15m, "Token balance should be "+rewardAfter15m);
+        var softCapReached = await tokensale.softCapReached();
+        softCapReached.should.be.equal(true);
+
+        var finish = await tokensale.finishCrowdsale({ from: owner });
+        var reward = await tokensale.withdrawTokenToFounders({ from: owner});
+        var balance = await tokensale.balanceOf(foundersWallet);
+
+        assert.equal(balance.toNumber(), rewardAfter15m, "Token balance should be "+rewardAfter15m);
 
 
-            });
+    });
 
 
     it("should transfer proper founderReward after 18 months ", async() =>{
@@ -760,8 +807,10 @@ describe('#after sale tests - ', async ()=>{
                 check.should.be.equal(true);
 
                 await increaseTime(4*weekInSeconds);
-                let rewardAfter3m = Math.floor(preicoAndAdvisors*6/10);
+                // let preicoAndAdvisors = await tokensale.preicoAndAdvisorsAmounts();
 
+
+                let rewardAfter3m = Math.floor(preicoAndAdvisors*3/5);
                 var buyTx = await tokensale.buyTokens(client, { from: client, value: maxEthInvestment });  
                 var buyTx2 = await tokensale.buyTokens(client, { from: client, value: 10*ETHER });  
 
@@ -838,5 +887,29 @@ describe('#after sale tests - ', async ()=>{
             });
 
 }); 
+describe('#token contract tests', async ()=>{
+
+
+
+    it('should forbid minting from client', async ()=>{
+
+
+        await shouldHaveException(async () => {
+           await Token.mint(client,100, {from: client})
+       });
+
+    });
+
+    it('should forbid endMinting from client', async ()=>{
+
+
+        await shouldHaveException(async () => {
+           await Token.endMinting(true, {from: client})
+       });
+        
+    });
+});
+
+
 
 });

@@ -7,7 +7,7 @@
     "test": "test"
   },
   "scripts": {
-    "test": "rm -rf build && truffle migrate --reset --compile-all && truffle test",
+    "test": "rm -rf build && truffle migrate --reset --compile-all && truffle test"
   },
   "author": "",
   "license": "ISC",

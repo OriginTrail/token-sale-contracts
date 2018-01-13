@@ -27,13 +27,16 @@ contract TraceTokenSale is Ownable{
 
   // Minimum and maximum investments in Ether
   uint256 public constant min_investment_eth = 0.5 ether; // fixed value, not changing
-  uint256 public constant max_investment_eth = 200 ether; // TODO - set value at time of deployment
+  uint256 public constant max_investment_eth = 10000 ether; // TODO - set value at time of deployment
 
   // TODO - set minimum investmet za presale na 5ETH
   uint256 public constant min_investment_presale_eth = 5 ether; // fixed value, not changing
 
   // refund if softCap is not reached
   bool public refundAllowed = false;
+
+  // pause flag
+  bool public paused = false;
 
   // amounts of tokens for bounty, team, advisors, founders, liquidityPool and futureDevelopment
   uint256 public constant bountyReward = 1e25; // 2% bounty
@@ -45,8 +48,8 @@ contract TraceTokenSale is Ownable{
 
   uint256 public leftOverTokens = 0;
 
-  uint256[8] public founderAmounts = [uint256(1125e22),1125e22,1125e22,1125e22,1125e22,1125e22,1125e22,1125e22];
-  uint256[2]  public preicoAndAdvisorsAmounts = [ uint256(1e25),1e25];
+  uint256[8] public founderAmounts = [uint256(teamAndFounders.div(8)),teamAndFounders.div(8),teamAndFounders.div(8),teamAndFounders.div(8),teamAndFounders.div(8),teamAndFounders.div(8),teamAndFounders.div(8),teamAndFounders.div(8)];
+  uint256[2]  public preicoAndAdvisorsAmounts = [ uint256(preicoAndAdvisors.mul(2).div(5)),preicoAndAdvisors.mul(2).div(5)];
 
 
   // Withdraw multisig wallet
@@ -99,8 +102,7 @@ contract TraceTokenSale is Ownable{
        return buyTokens(msg.sender);
      }
 
-     function calcAmount() internal constant returns (uint256) {
-      require(now<=endTime);
+     function calcAmount() internal view returns (uint256) {
 
       if (totalEthers >= presaleLimit || startTime + 2 * weekInSeconds  < now ){
         // presale has ended
@@ -117,7 +119,7 @@ contract TraceTokenSale is Ownable{
           }
 
           /* discount 15 % in the second week - presale week 2 */
-          if ( startTime +  weekInSeconds   < now  && now <= startTime + 2 * weekInSeconds) {
+          if ( startTime +  weekInSeconds   < now ) {
            return msg.value.mul(token_per_wei.mul(100)).div(85);
          }
        }
@@ -147,11 +149,11 @@ contract TraceTokenSale is Ownable{
 
 
      // @return user balance
-     function balanceOf(address _owner) public constant returns (uint256 balance) {
+     function balanceOf(address _owner) public view returns (uint256 balance) {
       return token.balanceOf(_owner);
     }
 
-    function checkWhitelist(address contributor, uint256 eth_amount) public constant returns (bool) {
+    function checkWhitelist(address contributor, uint256 eth_amount) public view returns (bool) {
      require(contributor!=0x0);
      require(eth_amount>0);
      return (whitelist[contributor] >= eth_amount);
@@ -181,27 +183,27 @@ contract TraceTokenSale is Ownable{
   }
 
 
-  function validPurchase() internal constant returns (bool) {
+  function validPurchase() internal view returns (bool) {
 
    bool withinPeriod = now >= startTime && now <= endTime;
    bool withinPurchaseLimits = msg.value >= min_investment_eth && msg.value <= max_investment_eth;
    return withinPeriod && withinPurchaseLimits;
  }
 
- function hasStarted() public constant returns (bool) {
+ function hasStarted() public view returns (bool) {
   return now >= startTime;
 }
 
-function hasEnded() public constant returns (bool) {
+function hasEnded() public view returns (bool) {
   return now > endTime || token.totalSupply() == TOTAL_NUM_TOKENS;
 }
 
 
-function hardCapReached() constant public returns (bool) {
+function hardCapReached() public view returns (bool) {
   return hardCap.mul(999).div(1000) <= totalEthers; 
 }
 
-function softCapReached() constant public returns(bool) {
+function softCapReached() public view returns(bool) {
   return totalEthers >= softCap;
 }
 
@@ -295,15 +297,30 @@ function finishCrowdsale() onlyOwner public returns (bool){
     leftOverTokens = TOTAL_NUM_TOKENS.sub(token.totalSupply());
     token.mint(wallet,leftOverTokens); // will be equaly distributed among all presale and sale contributors after the sale
 
-    token.doneMinting(true);
+    token.endMinting(true);
     return true;
     } else {
       refundAllowed = true;
-      token.doneMinting(false);
+      token.endMinting(false);
       return false;
     }
 
     Finalized();
   }
 
+
+  // additional functionality, used to pause crowdsale for 24h
+  function pauseSale() onlyOwner public returns (bool){
+    paused = true;
+    return true;
+  }
+
+  function unpauseSale() onlyOwner public returns (bool){
+    paused = false;
+    return true;
+  }
+
+  function isPaused() public view returns (bool){
+    return paused;
+  }
 }
