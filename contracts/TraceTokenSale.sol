@@ -132,6 +132,7 @@ contract TraceTokenSale is Ownable{
      */
      function buyTokens(address contributor) public payable {
        require(!hasEnded());
+       require(!isPaused());
        require(validPurchase());
        require(checkWhitelist(contributor,msg.value));
        uint256 amount = calcAmount();
